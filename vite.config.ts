@@ -1,16 +1,24 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { createRequire } from 'module';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Load environment variables from .env files
   const env = loadEnv(mode, process.cwd(), '');
 
-  // Use Vercel-specific TypeScript config when building for Vercel
-  if (process.env.VERCEL === '1') {
-    process.env.TS_NODE_PROJECT = './tsconfig.vercel.json';
-  }
+  // Create a custom require function to handle module resolution
+  const require = createRequire(import.meta.url);
+  
+  // This will prevent Vite from trying to process Supabase functions
+  const originalResolve = require.resolve;
+  require.resolve = (id: string, options: any) => {
+    if (id.includes('supabase/functions')) {
+      return ''; // Return empty string for Supabase functions to skip them
+    }
+    return originalResolve(id, options);
+  };
 
   return {
     server: {
@@ -25,6 +33,17 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       'process.env': env,
+    },
+    optimizeDeps: {
+      exclude: ['**/supabase/functions/**'],
+    },
+    build: {
+      rollupOptions: {
+        external: (id: string) => {
+          // Explicitly exclude any Supabase functions from the bundle
+          return id.includes('supabase/functions');
+        },
+      },
     },
   };
 });
