@@ -1,0 +1,6 @@
+# Ignore backend code and dev artifacts during Vercel build
+supabase/
+node_modules/
+*.log
+**/*.test.*
+**/*.spec.*
