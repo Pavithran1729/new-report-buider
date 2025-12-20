@@ -1,5 +1,13 @@
 # Ignore backend code and dev artifacts during Vercel build
-supabase/
+supabase/config.toml
+supabase/functions/analyze-originality/
+supabase/functions/enhance-content/
+supabase/functions/ensure-figures-bucket/
+supabase/functions/extract-insights/
+supabase/functions/generate-report/
+supabase/functions/parse-document/
+src/integrations/supabase/client.ts
+src/integrations/supabase/types.ts
 node_modules/
 *.log
 **/*.test.*
