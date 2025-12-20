@@ -6,8 +6,6 @@ supabase/functions/ensure-figures-bucket/index.ts
 supabase/functions/extract-insights/index.ts
 supabase/functions/generate-report/index.ts
 supabase/functions/parse-document/index.ts
-src/integrations/supabase/client.ts
-src/integrations/supabase/types.ts
 node_modules/
 *.log
 **/*.test.*
