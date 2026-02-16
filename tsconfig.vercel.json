@@ -1,8 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-    // Removed supabase/functions reference for Vercel build
-  ]
-}
