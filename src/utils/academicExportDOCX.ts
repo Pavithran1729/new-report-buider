@@ -54,8 +54,8 @@ export const exportToAcademicDOCX = async (
       .trim();
   };
 
-  // Helper to parse text with bold/italic
-  const parseTextRuns = (text: string): TextRun[] => {
+  // Helper to parse text with bold/italic and strip markdown markers
+  const parseTextRuns = (text: string, fontSize: number = FONT_SIZES.body, forceBold: boolean = false): TextRun[] => {
     const runs: TextRun[] = [];
     const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
     
@@ -66,20 +66,21 @@ export const exportToAcademicDOCX = async (
         runs.push(new TextRun({
           text: part.slice(2, -2),
           bold: true,
-          size: FONT_SIZES.body,
+          size: fontSize,
           font: 'Times New Roman',
         }));
-      } else if (part.startsWith('*') && part.endsWith('*')) {
+      } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
         runs.push(new TextRun({
           text: part.slice(1, -1),
           italics: true,
-          size: FONT_SIZES.body,
+          size: fontSize,
           font: 'Times New Roman',
         }));
       } else {
         runs.push(new TextRun({
           text: part,
-          size: FONT_SIZES.body,
+          bold: forceBold,
+          size: fontSize,
           font: 'Times New Roman',
         }));
       }
@@ -276,10 +277,23 @@ export const exportToAcademicDOCX = async (
     let tempSectionNum = 0;
     let tempSubsectionNum = 0;
 
+    // Helper to check if heading matches report title
+    const isReportTitleH = (headingText: string): boolean => {
+      const cleanH = headingText.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
+      const cleanT = title.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
+      if (!cleanH || !cleanT) return false;
+      return cleanH.includes(cleanT) || cleanT.includes(cleanH) ||
+             cleanH.startsWith(cleanT.substring(0, Math.min(30, cleanT.length))) ||
+             cleanT.startsWith(cleanH.substring(0, Math.min(30, cleanH.length)));
+    };
+
     sections.forEach((section) => {
       if (section.type === 'heading') {
         const cleanTitle = stripExistingNumbering(section.content);
         if (section.level === 1) {
+          // Skip title heading from TOC
+          if (isReportTitleH(cleanTitle)) return;
+
           tempSectionNum++;
           tempSubsectionNum = 0;
           tocEntries.push({
@@ -372,14 +386,27 @@ export const exportToAcademicDOCX = async (
   // === MAIN CONTENT ===
   const sections = parseMarkdownToSections(content);
 
+  // Helper to check if heading matches report title (for content section)
+  const isReportTitleHeading = (headingText: string): boolean => {
+    const cleanH = headingText.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
+    const cleanT = title.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
+    if (!cleanH || !cleanT) return false;
+    return cleanH.includes(cleanT) || cleanT.includes(cleanH) ||
+           cleanH.startsWith(cleanT.substring(0, Math.min(30, cleanT.length))) ||
+           cleanT.startsWith(cleanH.substring(0, Math.min(30, cleanH.length)));
+  };
+
   sections.forEach((section) => {
     switch (section.type) {
       case 'heading':
         if (section.level === 1) {
+          const cleanH1 = stripExistingNumbering(section.content);
+          // Skip the report title heading
+          if (isReportTitleHeading(cleanH1)) break;
+
           sectionNumber++;
           subsectionNumber = 0;
           
-          const cleanH1 = stripExistingNumbering(section.content);
           documentChildren.push(
             new Paragraph({
               children: [
@@ -429,6 +456,7 @@ export const exportToAcademicDOCX = async (
           documentChildren.push(
             new Paragraph({
               children: parseTextRuns(section.content),
+              alignment: AlignmentType.JUSTIFIED,
               spacing: {
                 after: 200,
                 line: 360, // 1.5 line spacing
@@ -463,12 +491,7 @@ export const exportToAcademicDOCX = async (
               children: row.map(cell =>
                 new TableCell({
                   children: [new Paragraph({
-                    children: [new TextRun({
-                      text: cell,
-                      bold: rowIndex === 0,
-                      size: 22,
-                      font: 'Times New Roman',
-                    })],
+                    children: parseTextRuns(cell, 22, rowIndex === 0),
                     alignment: AlignmentType.CENTER,
                   })],
                   shading: rowIndex === 0 ? { fill: 'E8E8E8' } : undefined,
@@ -535,8 +558,13 @@ export const exportToAcademicDOCX = async (
     }
   });
 
-  // === REFERENCES SECTION ===
-  if (structure.includeReferences && structure.citationStyle !== 'none') {
+  // === REFERENCES SECTION (Fallback) ===
+  // Only generate a separate References section if the AI didn't already include one in the content.
+  // Since we now parse References normally (not skipping), AI-generated references will already
+  // appear in the main content above. We only add mock citations as a fallback.
+  const hasAIReferences = /^#\s*(?:\d+\.?\s*)?REFERENCES/im.test(content);
+
+  if (structure.includeReferences && structure.citationStyle !== 'none' && !hasAIReferences) {
     documentChildren.push(
       new Paragraph({
         children: [new PageBreak()],
@@ -559,7 +587,7 @@ export const exportToAcademicDOCX = async (
       })
     );
 
-    // Extract citation numbers and generate mock citations
+    // Extract citation numbers and generate fallback mock citations
     const citationNumbers = extractCitationNumbers(content);
     
     if (citationNumbers.length > 0) {

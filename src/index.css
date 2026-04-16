@@ -133,3 +133,93 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* ========================================
+   TABLE STYLING - Scroll Preview (Dark Theme)
+   ======================================== */
+.prose table,
+.prose-invert table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  border: 1px solid hsl(var(--border));
+}
+
+.prose thead,
+.prose-invert thead {
+  background-color: hsl(var(--muted));
+}
+
+.prose tbody,
+.prose-invert tbody {
+  /* Ensure tbody rows alternate or have dividers */
+}
+
+.prose tr,
+.prose-invert tr {
+  border-bottom: 1px solid hsl(var(--border));
+  transition: background-color 0.15s ease;
+}
+
+.prose tr:hover,
+.prose-invert tr:hover {
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+.prose th,
+.prose-invert th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  font-size: 0.875rem;
+}
+
+.prose td,
+.prose-invert td {
+  padding: 0.75rem 1rem;
+  color: hsl(var(--foreground) / 0.9);
+  border: 1px solid hsl(var(--border));
+  font-size: 0.875rem;
+}
+
+/* ========================================
+   TABLE STYLING - Page View (Light/White Background)
+   ======================================== */
+.prose-sm table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  border: 1px solid #9ca3af;
+}
+
+.prose-sm thead {
+  background-color: #f3f4f6;
+}
+
+.prose-sm tr {
+  border-bottom: 1px solid #d1d5db;
+}
+
+.prose-sm th {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  font-weight: 700;
+  color: #111827;
+  border: 1px solid #9ca3af;
+  background-color: #f3f4f6;
+}
+
+.prose-sm td {
+  padding: 0.4rem 0.6rem;
+  color: #1f2937;
+  border: 1px solid #9ca3af;
+}
+
+/* Table overflow wrapper for responsive tables */
+.table-overflow-wrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border-radius: 0.5rem;
+}

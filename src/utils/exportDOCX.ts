@@ -41,7 +41,7 @@ export const exportToDOCX = async (
   );
 
   // Helper to parse text with bold/italic
-  const parseTextRuns = (text: string): TextRun[] => {
+  const parseTextRuns = (text: string, fontSize: number = 22, forceBold: boolean = false): TextRun[] => {
     const runs: TextRun[] = [];
     const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
     
@@ -52,18 +52,22 @@ export const exportToDOCX = async (
         runs.push(new TextRun({
           text: part.slice(2, -2),
           bold: true,
-          size: 22,
+          size: fontSize,
+          font: 'Calibri',
         }));
-      } else if (part.startsWith('*') && part.endsWith('*')) {
+      } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
         runs.push(new TextRun({
           text: part.slice(1, -1),
           italics: true,
-          size: 22,
+          size: fontSize,
+          font: 'Calibri',
         }));
       } else {
         runs.push(new TextRun({
           text: part,
-          size: 22,
+          bold: forceBold,
+          size: fontSize,
+          font: 'Calibri',
         }));
       }
     });
@@ -108,6 +112,7 @@ export const exportToDOCX = async (
           documentChildren.push(
             new Paragraph({
               children: parseTextRuns(section.content),
+              alignment: AlignmentType.JUSTIFIED,
               spacing: {
                 after: 160,
                 line: 360,
@@ -143,11 +148,7 @@ export const exportToDOCX = async (
               children: row.map(cell => 
                 new TableCell({
                   children: [new Paragraph({
-                    children: [new TextRun({
-                      text: cell,
-                      bold: rowIndex === 0,
-                      size: 20,
-                    })],
+                    children: parseTextRuns(cell, 20, rowIndex === 0),
                   })],
                   shading: rowIndex === 0 ? {
                     fill: 'F0F0F0',

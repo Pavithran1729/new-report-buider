@@ -17,13 +17,16 @@ import { ExtractedDataChips } from "./ExtractedDataChips";
 import { StatisticsPanel } from "./StatisticsPanel";
 import { HighlightableContent } from "./HighlightableContent";
 import { TemplateSelector } from "./TemplateSelector";
-import { Eye, Code, Download, BarChart3, Highlighter, Monitor, Smartphone, Tablet, Edit, Save, FileText, ScrollText, PanelLeftClose, PanelLeft } from "lucide-react";
+import { GrammarReviewDialog } from "./GrammarReviewDialog";
+import { Eye, Code, Download, BarChart3, Highlighter, Monitor, Smartphone, Tablet, Edit, Save, FileText, ScrollText, PanelLeftClose, PanelLeft, Wand2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { processTextWithPositions, processAcademicText } from "@/utils/regexProcessor";
 import { getTemplate } from "@/utils/templates";
 import { shouldUseTwoColumn } from "@/utils/formatHelpers";
 import type { ExtractedData } from "@/utils/regexProcessor";
+import { useAI } from "@/hooks/useAI";
+import { useToast } from "@/hooks/use-toast";
 
 // Helper to remove word count metadata for display
 const cleanWordCountFromDisplay = (text: string): string => {
@@ -83,6 +86,14 @@ export const PreviewPanel = ({
   const [isEditMode, setIsEditMode] = useState(false);
   const [editableContent, setEditableContent] = useState(cleanedContent);
   const [editableTitle, setEditableTitle] = useState(title);
+  const [isCheckingGrammar, setIsCheckingGrammar] = useState(false);
+  const [grammarDialogData, setGrammarDialogData] = useState<{ isOpen: boolean; originalText: string; revisedText: string }>({
+    isOpen: false,
+    originalText: "",
+    revisedText: ""
+  });
+  const { enhanceContent } = useAI();
+  const { toast } = useToast();
 
   // Context menu state for text selection enhancement
   const [contextMenu, setContextMenu] = useState<{
@@ -132,6 +143,39 @@ export const PreviewPanel = ({
     }
     handleContextMenuClose();
   }, [contextMenu.selectedText, editableContent, onContentChange, handleContextMenuClose]);
+
+  const handleGrammarCheck = async () => {
+    if (!cleanedContent) return;
+
+    setIsCheckingGrammar(true);
+    toast({
+      title: "Checking grammar...",
+      description: "AI is analyzing the full report. This may take a moment based on document length.",
+    });
+
+    try {
+      const improvedContent = await enhanceContent(cleanedContent, 'grammar-check');
+      if (improvedContent) {
+        setGrammarDialogData({
+          isOpen: true,
+          originalText: cleanedContent,
+          revisedText: improvedContent
+        });
+      }
+    } finally {
+      setIsCheckingGrammar(false);
+    }
+  };
+
+  const handleApplyGrammarCheck = (revisedText: string) => {
+    setEditableContent(revisedText);
+    onContentChange?.(revisedText);
+    toast({
+      title: "Changes Applied",
+      description: "Grammar corrections have been saved to your document.",
+      variant: "default",
+    });
+  };
 
   const template = getTemplate(selectedTemplate);
   const extractedDataWithPositions = processAcademicText(cleanedContent);
@@ -211,6 +255,19 @@ export const PreviewPanel = ({
                   >
                     <Highlighter className="h-4 w-4" />
                     <span className="hidden sm:inline">Highlight</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGrammarCheck}
+                    disabled={isCheckingGrammar || !cleanedContent}
+                    className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-100 dark:text-purple-400 dark:border-purple-900 dark:hover:bg-purple-950"
+                  >
+                    <Wand2 className={`h-4 w-4 ${isCheckingGrammar ? 'animate-spin' : ''}`} />
+                    <span className="hidden sm:inline">
+                      {isCheckingGrammar ? "Checking..." : "Fix Grammar"}
+                    </span>
                   </Button>
 
                   <Button
@@ -432,7 +489,7 @@ export const PreviewPanel = ({
                                 <h4 className="text-lg font-semibold mt-4 mb-2 text-foreground" {...props} />
                               ),
                               p: ({ ...props }) => (
-                                <p className="text-base leading-7 mb-4 text-foreground/90" {...props} />
+                                <p className="text-base leading-7 mb-4 text-foreground/90 text-justify" {...props} />
                               ),
                               strong: ({ ...props }) => (
                                 <strong className="font-bold text-foreground" {...props} />
@@ -465,24 +522,59 @@ export const PreviewPanel = ({
                                 <hr className="my-8 border-border" {...props} />
                               ),
                               table: ({ ...props }) => (
-                                <div className="overflow-x-auto my-6">
-                                  <table className="min-w-full border-collapse border border-border" {...props} />
+                                <div className="overflow-x-auto my-6 rounded-lg" style={{ overflowX: 'auto', margin: '1.5rem 0' }}>
+                                  <table
+                                    style={{
+                                      width: '100%',
+                                      borderCollapse: 'collapse',
+                                      border: '1px solid hsl(217, 33%, 25%)',
+                                    }}
+                                    {...props}
+                                  />
                                 </div>
                               ),
                               thead: ({ ...props }) => (
-                                <thead className="bg-muted" {...props} />
+                                <thead
+                                  style={{ backgroundColor: 'hsl(217, 33%, 20%)' }}
+                                  {...props}
+                                />
                               ),
                               tbody: ({ ...props }) => (
-                                <tbody className="divide-y divide-border" {...props} />
+                                <tbody {...props} />
                               ),
                               tr: ({ ...props }) => (
-                                <tr className="border-b border-border hover:bg-muted/50 transition-colors" {...props} />
+                                <tr
+                                  style={{
+                                    borderBottom: '1px solid hsl(217, 33%, 25%)',
+                                    transition: 'background-color 0.15s ease',
+                                  }}
+                                  className="hover:bg-muted/50"
+                                  {...props}
+                                />
                               ),
                               th: ({ ...props }) => (
-                                <th className="px-4 py-3 text-left font-semibold text-foreground border border-border" {...props} />
+                                <th
+                                  style={{
+                                    padding: '0.75rem 1rem',
+                                    textAlign: 'left',
+                                    fontWeight: 600,
+                                    border: '1px solid hsl(217, 33%, 25%)',
+                                    color: 'hsl(210, 40%, 98%)',
+                                    fontSize: '0.875rem',
+                                  }}
+                                  {...props}
+                                />
                               ),
                               td: ({ ...props }) => (
-                                <td className="px-4 py-3 text-foreground/90 border border-border" {...props} />
+                                <td
+                                  style={{
+                                    padding: '0.75rem 1rem',
+                                    border: '1px solid hsl(217, 33%, 25%)',
+                                    color: 'hsl(210, 40%, 90%)',
+                                    fontSize: '0.875rem',
+                                  }}
+                                  {...props}
+                                />
                               ),
                               a: ({ ...props }) => (
                                 <a className="text-primary underline hover:text-primary/80 transition-colors" {...props} />
@@ -536,6 +628,15 @@ export const PreviewPanel = ({
           onEnhancedContent={handleEnhancedContent}
         />
       )}
+
+      {/* Grammar Review Dialog */}
+      <GrammarReviewDialog
+        isOpen={grammarDialogData.isOpen}
+        onClose={() => setGrammarDialogData(prev => ({ ...prev, isOpen: false }))}
+        originalText={grammarDialogData.originalText}
+        revisedText={grammarDialogData.revisedText}
+        onAccept={handleApplyGrammarCheck}
+      />
     </Card>
   );
 };

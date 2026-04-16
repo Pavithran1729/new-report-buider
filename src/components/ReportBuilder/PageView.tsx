@@ -266,25 +266,52 @@ export const PageView = ({ title, content, className }: PageViewProps) => {
                         />
                       ),
                       table: ({ ...props }) => (
-                        <div className="overflow-x-auto my-2">
+                        <div className="overflow-x-auto my-2" style={{ margin: `${8 * scale}px 0` }}>
                           <table
-                            className="min-w-full border-collapse border border-gray-400"
-                            style={{ fontSize: `${10 * scale}px` }}
+                            className="min-w-full border-collapse"
+                            style={{
+                              fontSize: `${10 * scale}px`,
+                              border: '1px solid #9ca3af',
+                              borderCollapse: 'collapse',
+                              width: '100%',
+                            }}
                             {...props}
                           />
                         </div>
                       ),
                       th: ({ ...props }) => (
                         <th
-                          className="border border-gray-400 px-2 py-1 bg-gray-100 font-bold text-left"
+                          style={{
+                            border: '1px solid #9ca3af',
+                            padding: `${3 * scale}px ${6 * scale}px`,
+                            backgroundColor: '#f3f4f6',
+                            fontWeight: 700,
+                            textAlign: 'left',
+                            color: '#111827',
+                            fontSize: `${10 * scale}px`,
+                          }}
                           {...props}
                         />
                       ),
                       td: ({ ...props }) => (
                         <td
-                          className="border border-gray-400 px-2 py-1"
+                          style={{
+                            border: '1px solid #9ca3af',
+                            padding: `${3 * scale}px ${6 * scale}px`,
+                            color: '#1f2937',
+                            fontSize: `${10 * scale}px`,
+                          }}
                           {...props}
                         />
+                      ),
+                      thead: ({ ...props }) => (
+                        <thead style={{ backgroundColor: '#f3f4f6' }} {...props} />
+                      ),
+                      tbody: ({ ...props }) => (
+                        <tbody style={{ borderTop: '1px solid #d1d5db' }} {...props} />
+                      ),
+                      tr: ({ ...props }) => (
+                        <tr style={{ borderBottom: '1px solid #d1d5db' }} {...props} />
                       ),
                       code: ({ inline, ...props }: any) =>
                         inline ? (

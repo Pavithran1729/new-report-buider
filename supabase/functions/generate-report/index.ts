@@ -17,7 +17,8 @@ serve(async (req) => {
       documentContent = '', 
       additionalInstructions = '',
       reportType = 'project-report',
-      academicDetails = null
+      academicDetails = null,
+      citationStyle = 'ieee'
     } = await req.json();
 
     if (!title) {
@@ -73,8 +74,9 @@ CRITICAL FORMATTING REQUIREMENTS:
    - Each citation marker should appear immediately after the relevant statement or claim
    - Example: "According to recent studies [1], machine learning has revolutionized artificial intelligence [2]."
    - Use consecutive numbering [1], [2], [3], etc. in order of first appearance
-   - Generate realistic mock references for each citation number used
-   - The reference section will be auto-generated based on these citations
+    - You MUST generate a complete REFERENCES section at the end of the report
+    - Each reference must be a realistic, properly formatted academic reference
+    - Every citation marker [N] used in the text MUST have a corresponding entry in the References section
 
 4. Formatting guidelines:
    - Use **bold** for key terms and important concepts
@@ -139,6 +141,9 @@ Structure your report with properly numbered sections:
 # 5. RESULTS AND FINDINGS
 # 6. DISCUSSION
 # 7. CONCLUSION
+# 8. REFERENCES
+
+The REFERENCES section is MANDATORY. Format all references using ${citationStyle.toUpperCase()} style. Each [N] citation marker used in the text must have a corresponding numbered entry in the References section.
 
 Generate the complete report with all sections fully populated. Include citations as instructed.
 
@@ -191,6 +196,9 @@ Structure your report with properly numbered sections:
 ## 7.1 Summary
 ## 7.2 Recommendations
 ## 7.3 Future Work
+
+# 8. REFERENCES
+(List ALL references cited in the text as [1], [2], etc. Format using ${citationStyle.toUpperCase()} citation style. This section is MANDATORY.)
 
 Generate the complete report with all sections fully populated. Be thorough, detailed, and include citations as instructed.
 

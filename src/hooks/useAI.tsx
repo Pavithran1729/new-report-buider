@@ -18,13 +18,14 @@ export const useAI = () => {
       setLoading(true);
 
       const { data, error } = await supabase.functions.invoke('generate-report', {
-        body: { 
-          title, 
-          template, 
-          documentContent, 
+        body: {
+          title,
+          template,
+          documentContent,
           additionalInstructions,
           reportType: academicConfig?.reportType || 'project-report',
-          academicDetails: academicConfig?.academicDetails || null
+          academicDetails: academicConfig?.academicDetails || null,
+          citationStyle: academicConfig?.structure?.citationStyle || 'ieee'
         },
       });
 
@@ -63,7 +64,7 @@ export const useAI = () => {
 
   const enhanceContent = async (
     content: string,
-    enhancementType: 'expand' | 'summarize' | 'improve' | 'rephrase' = 'improve',
+    enhancementType: 'expand' | 'summarize' | 'improve' | 'rephrase' | 'grammar-check' = 'improve',
     tone: string = 'professional'
   ): Promise<string | null> => {
     try {

@@ -28,9 +28,13 @@ export const exportToAcademicPDF = async (
   let sectionNumber = 0;
   let subsectionNumber = 0;
 
+  const LINE_HEIGHT = 5.5;
+  const PARAGRAPH_SPACING = 3;
+  const BOTTOM_MARGIN = margin + 15;
+
   // Helper to add new page if needed
   const checkPageBreak = (requiredSpace: number) => {
-    if (yPosition + requiredSpace > pageHeight - margin - 15) {
+    if (yPosition + requiredSpace > pageHeight - BOTTOM_MARGIN) {
       pdf.addPage();
       currentPage++;
       yPosition = margin;
@@ -41,7 +45,6 @@ export const exportToAcademicPDF = async (
 
   // Helper to strip existing section numbering from headings
   const stripExistingNumbering = (text: string): string => {
-    // Remove patterns like "1. ", "1.1 ", "2.1.3 ", "SECTION 1:", etc.
     return text
       .replace(/^[\d.]+\s*/, '')
       .replace(/^SECTION\s*\d+[:.]\s*/i, '')
@@ -49,15 +52,19 @@ export const exportToAcademicPDF = async (
       .trim();
   };
 
-  // Helper to render text with bold/italic formatting
-  const renderFormattedText = (text: string, x: number, y: number, maxWidth: number): number => {
+  // Strip bold/italic markdown markers from text
+  const stripFormatting = (text: string): string => {
+    return text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1');
+  };
+
+  // Parse text into segments with bold/italic flags
+  const parseFormattedSegments = (text: string): { text: string; bold: boolean; italic: boolean }[] => {
     const segments: { text: string; bold: boolean; italic: boolean }[] = [];
     let remaining = text;
 
-    // Parse bold and italic markers
     while (remaining.length > 0) {
       const boldMatch = remaining.match(/\*\*(.*?)\*\*/);
-      const italicMatch = remaining.match(/\*(.*?)\*/);
+      const italicMatch = remaining.match(/(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)/);
 
       if (boldMatch && (!italicMatch || boldMatch.index! <= italicMatch.index!)) {
         if (boldMatch.index! > 0) {
@@ -77,43 +84,156 @@ export const exportToAcademicPDF = async (
       }
     }
 
-    // Render segments
-    let currentX = x;
-    let currentY = y;
-    const lineHeight = 6;
+    return segments;
+  };
 
-    segments.forEach(segment => {
-      if (segment.bold) {
+  // Render a paragraph with inline bold/italic, proper line wrapping
+  const renderFormattedParagraph = (
+    text: string,
+    startX: number,
+    maxWidth: number,
+    fontSize: number = 11,
+    indent: number = 10
+  ): void => {
+    const segments = parseFormattedSegments(text);
+    pdf.setFontSize(fontSize);
+
+    // Build a flat list of words with their formatting
+    const words: { word: string; bold: boolean; italic: boolean }[] = [];
+    segments.forEach(seg => {
+      const segWords = seg.text.split(/(\s+)/);
+      segWords.forEach(w => {
+        if (w) words.push({ word: w, bold: seg.bold, italic: seg.italic });
+      });
+    });
+
+    let currentX = startX + indent; // First line indented
+    const leftMargin = startX;
+    let isFirstLine = true;
+
+    words.forEach(({ word, bold, italic }) => {
+      if (bold) {
         pdf.setFont('times', 'bold');
-      } else if (segment.italic) {
+      } else if (italic) {
         pdf.setFont('times', 'italic');
       } else {
         pdf.setFont('times', 'normal');
       }
 
-      const words = segment.text.split(' ');
-      words.forEach((word, idx) => {
-        const wordWithSpace = idx < words.length - 1 ? word + ' ' : word;
-        const wordWidth = pdf.getTextWidth(wordWithSpace);
+      const wordWidth = pdf.getTextWidth(word);
+      const lineEnd = leftMargin + maxWidth;
 
-        if (currentX + wordWidth > x + maxWidth && currentX > x) {
-          currentY += lineHeight;
-          currentX = x;
-          checkPageBreak(lineHeight);
-        }
+      // Check if word fits on current line
+      if (currentX + wordWidth > lineEnd && currentX > leftMargin + (isFirstLine ? indent : 0)) {
+        // Wrap to next line
+        yPosition += LINE_HEIGHT;
+        checkPageBreak(LINE_HEIGHT);
+        currentX = leftMargin;
+        isFirstLine = false;
+      }
 
-        pdf.text(wordWithSpace, currentX, currentY);
-        currentX += wordWidth;
-      });
+      pdf.text(word, currentX, yPosition);
+      currentX += wordWidth;
     });
 
+    // Reset font and advance position
     pdf.setFont('times', 'normal');
-    return currentY + lineHeight;
+    yPosition += LINE_HEIGHT;
   };
 
-  // Simple text style stripper for non-formatted output
-  const processTextStyle = (text: string) => {
-    return text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1');
+  // Render plain text paragraph (no formatting, just text wrapping)
+  const renderPlainParagraph = (
+    text: string,
+    startX: number,
+    maxWidth: number,
+    fontSize: number = 11,
+    indent: number = 10
+  ): void => {
+    pdf.setFontSize(fontSize);
+    pdf.setFont('times', 'normal');
+    const lines = pdf.splitTextToSize(text, maxWidth - indent);
+
+    if (lines.length > 0) {
+      // First line with indent
+      checkPageBreak(LINE_HEIGHT);
+      pdf.text(lines[0], startX + indent, yPosition);
+      yPosition += LINE_HEIGHT;
+
+      // Remaining lines without indent
+      for (let i = 1; i < lines.length; i++) {
+        checkPageBreak(LINE_HEIGHT);
+        pdf.text(lines[i], startX, yPosition);
+        yPosition += LINE_HEIGHT;
+      }
+    }
+  };
+
+  // Render a table with proper cell sizing
+  const renderTable = (rows: string[][], startX: number, tableWidth: number): void => {
+    if (!rows || rows.length === 0) return;
+
+    const colCount = rows[0].length;
+    const colWidth = tableWidth / colCount;
+    const cellPadding = 2;
+    const cellFontSize = 9;
+
+    pdf.setFontSize(cellFontSize);
+
+    // Calculate row heights based on content
+    const rowHeights = rows.map(row => {
+      let maxLines = 1;
+      row.forEach(cell => {
+        const cleanCell = stripFormatting(cell);
+        const lines = pdf.splitTextToSize(cleanCell, colWidth - cellPadding * 2);
+        maxLines = Math.max(maxLines, lines.length);
+      });
+      return Math.max(8, maxLines * 4 + 4);
+    });
+
+    const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0);
+    checkPageBreak(totalHeight + 10);
+
+    let currentRowY = yPosition;
+
+    rows.forEach((row, rowIndex) => {
+      const rowHeight = rowHeights[rowIndex];
+
+      row.forEach((cell, colIndex) => {
+        const x = startX + colIndex * colWidth;
+
+        // Draw cell border
+        pdf.setDrawColor(150, 150, 150);
+        pdf.setLineWidth(0.3);
+        pdf.rect(x, currentRowY, colWidth, rowHeight);
+
+        // Header row styling
+        if (rowIndex === 0) {
+          pdf.setFillColor(230, 230, 230);
+          pdf.rect(x, currentRowY, colWidth, rowHeight, 'F');
+          // Redraw border on top of fill
+          pdf.setDrawColor(150, 150, 150);
+          pdf.rect(x, currentRowY, colWidth, rowHeight);
+          pdf.setFont('times', 'bold');
+        } else {
+          pdf.setFont('times', 'normal');
+        }
+
+        pdf.setFontSize(cellFontSize);
+        const cleanCell = stripFormatting(cell);
+        const cellLines = pdf.splitTextToSize(cleanCell, colWidth - cellPadding * 2);
+
+        // Render ALL lines of cell text
+        cellLines.forEach((line: string, lineIdx: number) => {
+          pdf.text(line, x + cellPadding, currentRowY + 4 + lineIdx * 4);
+        });
+      });
+
+      currentRowY += rowHeight;
+    });
+
+    // Reset font and advance position
+    pdf.setFont('times', 'normal');
+    yPosition = currentRowY + 6;
   };
 
   // ============ TWO-COLUMN LAYOUT HELPER ============
@@ -162,13 +282,11 @@ export const exportToAcademicPDF = async (
   ): boolean => {
     const currentY = columnState.currentColumn === 'left' ? columnState.leftY : columnState.rightY;
 
-    if (currentY + requiredSpace > pageHeight - margin - 15) {
+    if (currentY + requiredSpace > pageHeight - BOTTOM_MARGIN) {
       if (columnState.currentColumn === 'left') {
-        // Switch to right column
         columnState.currentColumn = 'right';
         return false;
       } else {
-        // Both columns full, need new page
         pdf.addPage();
         currentPage++;
         columnState.leftY = margin;
@@ -180,7 +298,6 @@ export const exportToAcademicPDF = async (
     return false;
   };
 
-  // Update the current column Y position
   const updateColumnY = (columnState: ColumnState, newY: number) => {
     if (columnState.currentColumn === 'left') {
       columnState.leftY = newY;
@@ -189,7 +306,6 @@ export const exportToAcademicPDF = async (
     }
   };
 
-  // Get current column position
   const getCurrentColumnY = (columnState: ColumnState): number => {
     return columnState.currentColumn === 'left' ? columnState.leftY : columnState.rightY;
   };
@@ -287,16 +403,29 @@ export const exportToAcademicPDF = async (
 
   // === TABLE OF CONTENTS ===
   if (structure.includeToc) {
-    // First, collect all headings from content to build TOC
     const sections = parseMarkdownToSections(content);
     const tocEntries: { title: string; level: number; sectionNum: string }[] = [];
     let tempSectionNum = 0;
     let tempSubsectionNum = 0;
 
+    // Helper to check if a heading is the report title (should be skipped)
+    const isReportTitle = (headingText: string): boolean => {
+      const cleanHeading = headingText.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
+      const cleanTitle = title.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
+      // Match if heading contains the title or vice versa
+      return cleanHeading.includes(cleanTitle) || cleanTitle.includes(cleanHeading) || 
+             cleanHeading.length > 0 && cleanTitle.length > 0 && 
+             (cleanHeading.startsWith(cleanTitle.substring(0, Math.min(30, cleanTitle.length))) ||
+              cleanTitle.startsWith(cleanHeading.substring(0, Math.min(30, cleanHeading.length))));
+    };
+
     sections.forEach((section) => {
       if (section.type === 'heading') {
         const cleanTitle = stripExistingNumbering(section.content);
         if (section.level === 1) {
+          // Skip the report title heading — it's already on the cover page
+          if (isReportTitle(cleanTitle)) return;
+
           tempSectionNum++;
           tempSubsectionNum = 0;
           tocEntries.push({
@@ -320,45 +449,42 @@ export const exportToAcademicPDF = async (
     pdf.text('TABLE OF CONTENTS', pageWidth / 2, yPosition, { align: 'center' });
     yPosition += 15;
 
-    // Render actual TOC entries
     pdf.setFontSize(11);
     pdf.setFont('times', 'normal');
 
-    const tocStartPage = currentPage + 1; // Content starts after TOC
-    let estimatedPage = tocStartPage;
+    const tocStartPage = currentPage + 1;
     const charsPerPage = 2500;
-    let charCount = 0;
 
-    tocEntries.forEach((entry, index) => {
+    tocEntries.forEach((entry) => {
       checkPageBreak(8);
 
-      // Estimate page number based on content position
       const sectionIndex = sections.findIndex(s =>
         s.type === 'heading' &&
-        stripExistingNumbering(s.content).toUpperCase() === entry.title ||
-        stripExistingNumbering(s.content) === entry.title
+        (stripExistingNumbering(s.content).toUpperCase() === entry.title ||
+        stripExistingNumbering(s.content) === entry.title)
       );
 
-      // Calculate char count up to this section
       let sectionCharCount = 0;
       for (let i = 0; i < sectionIndex; i++) {
         sectionCharCount += sections[i].content?.length || 0;
       }
-      estimatedPage = tocStartPage + Math.floor(sectionCharCount / charsPerPage);
+      const estimatedPage = tocStartPage + Math.floor(sectionCharCount / charsPerPage);
 
       const indent = entry.level === 1 ? 0 : 10;
-      const tocText = `${entry.sectionNum} ${entry.title}`;
+      // Truncate long TOC entries to fit on the page
+      const maxTocTextWidth = contentWidth - indent - 30; // Leave space for dots and page number
+      let tocText = `${entry.sectionNum} ${entry.title}`;
+      pdf.setFont('times', entry.level === 1 ? 'bold' : 'normal');
+      while (pdf.getTextWidth(tocText) > maxTocTextWidth && tocText.length > 10) {
+        tocText = tocText.substring(0, tocText.length - 4) + '...';
+      }
       const pageNumText = `${estimatedPage}`;
 
-      // Draw entry text
-      pdf.setFont('times', entry.level === 1 ? 'bold' : 'normal');
       pdf.text(tocText, margin + indent, yPosition);
 
-      // Draw page number right-aligned
       pdf.setFont('times', 'normal');
       pdf.text(pageNumText, pageWidth - margin, yPosition, { align: 'right' });
 
-      // Draw dotted line between title and page number
       const textWidth = pdf.getTextWidth(tocText);
       const pageNumWidth = pdf.getTextWidth(pageNumText);
       const dotsStart = margin + indent + textWidth + 5;
@@ -381,6 +507,16 @@ export const exportToAcademicPDF = async (
   // === MAIN CONTENT ===
   const sections = parseMarkdownToSections(content);
   const useTwoColumn = shouldUseTwoColumn(config.reportType, structure.layout);
+
+  // Helper to check if a heading is the report title (should be skipped in numbering)
+  const isReportTitleHeading = (headingText: string): boolean => {
+    const cleanHeading = headingText.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
+    const cleanTitleStr = title.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
+    if (!cleanHeading || !cleanTitleStr) return false;
+    return cleanHeading.includes(cleanTitleStr) || cleanTitleStr.includes(cleanHeading) ||
+           cleanHeading.startsWith(cleanTitleStr.substring(0, Math.min(30, cleanTitleStr.length))) ||
+           cleanTitleStr.startsWith(cleanHeading.substring(0, Math.min(30, cleanHeading.length)));
+  };
 
   if (useTwoColumn) {
     // ============ TWO-COLUMN LAYOUT (Research Papers) ============
@@ -413,26 +549,29 @@ export const exportToAcademicPDF = async (
       columnState.rightY = yPosition;
     }
 
+    // Reset font for content
+    pdf.setFont('times', 'normal');
 
     // Render content in two columns
     sections.forEach((section) => {
       switch (section.type) {
         case 'heading':
           if (section.level === 1) {
+            const cleanH1Check = stripExistingNumbering(section.content);
+            // Skip the report title heading
+            if (isReportTitleHeading(cleanH1Check)) break;
+
             sectionNumber++;
             subsectionNumber = 0;
 
-            // Check page break FIRST, then get fresh positions
             checkTwoColumnPageBreak(columnState, 15, columnCfg.columnWidth, columnCfg.leftColumnX, columnCfg.rightColumnX);
 
-            // Get fresh positions AFTER potential column switch
             const h1Y = getCurrentColumnY(columnState);
             const h1X = getCurrentColumnX(columnState, columnCfg.leftColumnX, columnCfg.rightColumnX);
 
             const cleanH1 = stripExistingNumbering(section.content);
             const headingText = `${sectionNumber}. ${cleanH1.toUpperCase()}`;
 
-            // Add spacing before heading
             updateColumnY(columnState, h1Y + 8);
             const newY = renderTextInColumn(headingText, h1X, getCurrentColumnY(columnState), columnCfg.columnWidth, 12, true);
             updateColumnY(columnState, newY + 6);
@@ -447,7 +586,6 @@ export const exportToAcademicPDF = async (
             const cleanH2 = stripExistingNumbering(section.content);
             const h2Text = `${sectionNumber}.${subsectionNumber} ${cleanH2}`;
 
-            // Add spacing before heading
             updateColumnY(columnState, h2Y + 5);
             const newY = renderTextInColumn(h2Text, h2X, getCurrentColumnY(columnState), columnCfg.columnWidth, 11, true);
             updateColumnY(columnState, newY + 4);
@@ -461,7 +599,7 @@ export const exportToAcademicPDF = async (
             const pY = getCurrentColumnY(columnState);
             const pX = getCurrentColumnX(columnState, columnCfg.leftColumnX, columnCfg.rightColumnX);
 
-            const cleanText = processTextStyle(section.content);
+            const cleanText = stripFormatting(section.content);
             const newY = renderTextInColumn(cleanText, pX, pY, columnCfg.columnWidth, 10);
             updateColumnY(columnState, newY + 4);
           }
@@ -478,9 +616,25 @@ export const exportToAcademicPDF = async (
           pdf.setFont('times', 'normal');
           pdf.text('•', listX, listY);
 
-          const cleanList = processTextStyle(section.content);
+          const cleanList = stripFormatting(section.content);
           const newY = renderTextInColumn(cleanList, listX + 5, listY, columnCfg.columnWidth - 5, 10);
           updateColumnY(columnState, newY + 2);
+          break;
+
+        case 'table':
+          // Tables in two-column mode: render full-width across both columns
+          if (section.rows && section.rows.length > 0) {
+            const maxColY = Math.max(columnState.leftY, columnState.rightY);
+            columnState.leftY = maxColY;
+            columnState.rightY = maxColY;
+            yPosition = maxColY;
+
+            renderTable(section.rows, margin, contentWidth);
+
+            columnState.leftY = yPosition;
+            columnState.rightY = yPosition;
+            columnState.currentColumn = 'left';
+          }
           break;
 
         case 'space':
@@ -490,121 +644,101 @@ export const exportToAcademicPDF = async (
     });
 
   } else {
-    // ============ SINGLE-COLUMN LAYOUT (Original) ============
+    // ============ SINGLE-COLUMN LAYOUT ============
     sections.forEach((section) => {
-      checkPageBreak(20);
-
       switch (section.type) {
         case 'heading':
           if (section.level === 1) {
+            const cleanH1Check = stripExistingNumbering(section.content);
+            // Skip the report title heading — already on cover page
+            if (isReportTitleHeading(cleanH1Check)) break;
+
             sectionNumber++;
             subsectionNumber = 0;
 
-            checkPageBreak(25);
-            yPosition += 10;
+            checkPageBreak(20);
+            yPosition += 6; // Space before heading
+
             pdf.setFontSize(14);
             pdf.setFont('times', 'bold');
             const cleanH1 = stripExistingNumbering(section.content);
             const headingText = `${sectionNumber}. ${cleanH1.toUpperCase()}`;
             const h1Lines = pdf.splitTextToSize(headingText, contentWidth);
             pdf.text(h1Lines, margin, yPosition);
-            yPosition += h1Lines.length * 7 + 8;
+            yPosition += h1Lines.length * 7;
+
+            // Reset font immediately after heading
+            pdf.setFont('times', 'normal');
+            yPosition += 4; // Space after heading
           } else if (section.level === 2) {
             subsectionNumber++;
 
-            checkPageBreak(20);
-            yPosition += 6;
+            checkPageBreak(15);
+            yPosition += 4; // Space before heading
+
             pdf.setFontSize(12);
             pdf.setFont('times', 'bold');
             const cleanH2 = stripExistingNumbering(section.content);
             const h2Text = `${sectionNumber}.${subsectionNumber} ${cleanH2}`;
             const h2Lines = pdf.splitTextToSize(h2Text, contentWidth);
             pdf.text(h2Lines, margin, yPosition);
-            yPosition += h2Lines.length * 6 + 6;
+            yPosition += h2Lines.length * 6;
+
+            // Reset font immediately after heading
+            pdf.setFont('times', 'normal');
+            yPosition += 3; // Space after heading
           } else {
-            checkPageBreak(15);
-            yPosition += 4;
+            checkPageBreak(12);
+            yPosition += 3; // Space before heading
+
             pdf.setFontSize(11);
             pdf.setFont('times', 'bold');
             const cleanH3 = stripExistingNumbering(section.content);
-            const cleanHeading = processTextStyle(cleanH3);
+            const cleanHeading = stripFormatting(cleanH3);
             const h3Lines = pdf.splitTextToSize(cleanHeading, contentWidth);
             pdf.text(h3Lines, margin, yPosition);
-            yPosition += h3Lines.length * 5 + 5;
+            yPosition += h3Lines.length * 5;
+
+            // Reset font immediately after heading
+            pdf.setFont('times', 'normal');
+            yPosition += 2; // Space after heading
           }
           break;
 
         case 'paragraph':
-          pdf.setFontSize(11);
           if (section.content.trim()) {
-            // Check if content has bold/italic markers
+            pdf.setFontSize(11);
+
+            // Use formatted rendering if text has bold/italic markers
             if (section.content.includes('**') || section.content.includes('*')) {
-              yPosition = renderFormattedText(section.content, margin + 10, yPosition, contentWidth - 10);
+              renderFormattedParagraph(section.content, margin, contentWidth, 11, 10);
             } else {
-              pdf.setFont('times', 'normal');
-              const paraLines = pdf.splitTextToSize(section.content, contentWidth - 10);
-              if (paraLines.length > 0) {
-                // First line with indent
-                pdf.text(paraLines[0], margin + 10, yPosition);
-                yPosition += 6;
-                // Rest of lines
-                for (let i = 1; i < paraLines.length; i++) {
-                  checkPageBreak(6);
-                  pdf.text(paraLines[i], margin, yPosition);
-                  yPosition += 6;
-                }
-              }
+              renderPlainParagraph(section.content, margin, contentWidth, 11, 10);
             }
-            yPosition += 3;
+
+            yPosition += PARAGRAPH_SPACING;
           }
           break;
 
         case 'list-item':
         case 'ordered-list-item':
+          checkPageBreak(8);
           pdf.setFontSize(11);
           pdf.setFont('times', 'normal');
-          const bullet = section.type === 'ordered-list-item' ? '•' : '•';
-          pdf.text(bullet, margin + 5, yPosition);
-          const cleanList = processTextStyle(section.content);
-          const listLines = pdf.splitTextToSize(cleanList, contentWidth - 15);
-          pdf.text(listLines, margin + 12, yPosition);
-          yPosition += listLines.length * 6 + 2;
+          pdf.text('•', margin + 5, yPosition);
+          const cleanListItem = stripFormatting(section.content);
+          const listLines = pdf.splitTextToSize(cleanListItem, contentWidth - 15);
+          listLines.forEach((line: string, idx: number) => {
+            if (idx > 0) checkPageBreak(LINE_HEIGHT);
+            pdf.text(line, margin + 12, yPosition);
+            if (idx < listLines.length - 1) yPosition += LINE_HEIGHT;
+          });
+          yPosition += LINE_HEIGHT + 1;
           break;
 
         case 'table':
           if (section.rows && section.rows.length > 0) {
-            checkPageBreak(25 + section.rows.length * 8);
-
-            const colCount = section.rows[0].length;
-            const colWidth = contentWidth / colCount;
-            const rowHeight = 8;
-
-            section.rows.forEach((row, rowIndex) => {
-              row.forEach((cell, colIndex) => {
-                const x = margin + colIndex * colWidth;
-                const y = yPosition + rowIndex * rowHeight;
-
-                // Draw cell border
-                pdf.setDrawColor(150, 150, 150);
-                pdf.setLineWidth(0.3);
-                pdf.rect(x, y, colWidth, rowHeight);
-
-                // Header row background
-                if (rowIndex === 0) {
-                  pdf.setFillColor(230, 230, 230);
-                  pdf.rect(x, y, colWidth, rowHeight, 'F');
-                  pdf.setFont('times', 'bold');
-                } else {
-                  pdf.setFont('times', 'normal');
-                }
-
-                pdf.setFontSize(9);
-                const cellText = pdf.splitTextToSize(cell, colWidth - 4);
-                pdf.text(cellText[0] || '', x + 2, y + 5);
-              });
-            });
-
-            yPosition += section.rows.length * rowHeight + 10;
+            renderTable(section.rows, margin, contentWidth);
           }
           break;
 
@@ -619,18 +753,21 @@ export const exportToAcademicPDF = async (
           codeLines.forEach((line, idx) => {
             pdf.text(line, margin + 3, yPosition + idx * 4);
           });
+          pdf.setFont('times', 'normal'); // Reset font after code
           yPosition += codeHeight + 5;
           break;
 
         case 'space':
-          yPosition += 4;
+          yPosition += 3;
           break;
       }
     });
   }
 
-  // === REFERENCES SECTION ===
-  if (structure.includeReferences && structure.citationStyle !== 'none') {
+  // === REFERENCES SECTION (Fallback) ===
+  const hasAIReferences = /^#\s*(?:\d+\.?\s*)?REFERENCES/im.test(content);
+
+  if (structure.includeReferences && structure.citationStyle !== 'none' && !hasAIReferences) {
     pdf.addPage();
     currentPage++;
     yPosition = margin;
@@ -639,11 +776,10 @@ export const exportToAcademicPDF = async (
     pdf.setFontSize(14);
     pdf.setFont('times', 'bold');
     pdf.text(`${sectionNumber}. REFERENCES`, margin, yPosition);
+    pdf.setFont('times', 'normal'); // Reset font
     yPosition += 15;
 
-    // Extract citation numbers and generate mock citations
     const citationNumbers = extractCitationNumbers(content);
-    let referencesText = '';
 
     if (citationNumbers.length > 0) {
       const mockCitations = generateMockCitations(citationNumbers);
@@ -655,11 +791,9 @@ export const exportToAcademicPDF = async (
         const formattedRef = `[${index + 1}] ${formatCitation(citation, structure.citationStyle)}`;
         const refLines = pdf.splitTextToSize(formattedRef, contentWidth - 15);
 
-        // Number label
         pdf.text(`[${index + 1}]`, margin, yPosition);
 
-        // Reference text (indented)
-        refLines.forEach((line, lineIdx) => {
+        refLines.forEach((line: string, lineIdx: number) => {
           if (lineIdx === 0) {
             pdf.text(line, margin + 15, yPosition);
           } else {

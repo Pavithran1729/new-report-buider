@@ -36,7 +36,6 @@ export const parseMarkdownToSections = (content: string) => {
   let tableRows: string[][] = [];
   let inCodeBlock = false;
   let codeContent: string[] = [];
-  let skipUntilNextSection = false;
 
   lines.forEach((line, index) => {
     // Skip any line that contains word count metadata
@@ -77,40 +76,32 @@ export const parseMarkdownToSections = (content: string) => {
         inTable = true;
         tableRows = [];
       }
-      // Skip separator rows
-      if (!line.match(/^\|[\s\-:]+\|/)) {
+      // Skip separator rows (e.g., |---|---|, |:---:|---:|, | --- | --- |)
+      if (!line.match(/^\|[\s\-:|\+]+\|?\s*$/)) {
         const cells = line.split('|').slice(1, -1).map(cell => cell.trim());
-        tableRows.push(cells);
+        if (cells.length > 0) {
+          tableRows.push(cells);
+        }
       }
       return;
     } else if (inTable) {
-      sections.push({ type: 'table', content: '', rows: tableRows });
+      if (tableRows.length > 0) {
+        sections.push({ type: 'table', content: '', rows: tableRows });
+      }
       tableRows = [];
       inTable = false;
     }
 
     // Handle headings
     if (line.startsWith('#### ')) {
-      skipUntilNextSection = false;
       sections.push({ type: 'heading', content: line.slice(5), level: 4 });
     } else if (line.startsWith('### ')) {
-      skipUntilNextSection = false;
       sections.push({ type: 'heading', content: line.slice(4), level: 3 });
     } else if (line.startsWith('## ')) {
-      skipUntilNextSection = false;
       sections.push({ type: 'heading', content: line.slice(3), level: 2 });
     } else if (line.startsWith('# ')) {
       const headingText = line.slice(2);
-      // Skip REFERENCES section and all content until next main section
-      if (headingText.match(/^(REFERENCES|8\.\s+REFERENCES|References)$/i)) {
-        skipUntilNextSection = true;
-        return;
-      }
-      skipUntilNextSection = false;
       sections.push({ type: 'heading', content: headingText, level: 1 });
-    } else if (skipUntilNextSection) {
-      // Skip all content under REFERENCES section
-      return;
     } else if (line.trim() === '') {
       sections.push({ type: 'space', content: '' });
     } else if (line.match(/^---+$/)) {

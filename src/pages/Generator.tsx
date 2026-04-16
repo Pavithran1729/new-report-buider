@@ -5,8 +5,6 @@ import { PreviewPanel } from "@/components/ReportBuilder/PreviewPanel";
 import { ExportDialog } from "@/components/ReportBuilder/ExportDialog";
 import { GenerationProgress, type GenerationStage } from "@/components/ReportBuilder/GenerationProgress";
 import { CitationManager } from "@/components/ReportBuilder/CitationManager";
-import { FigureManager } from "@/components/ReportBuilder/FigureManager";
-import { TableEditor } from "@/components/ReportBuilder/TableEditor";
 import { OriginalityPanel } from "@/components/ReportBuilder/OriginalityPanel";
 import { TemplateLibrary } from "@/components/ReportBuilder/TemplateLibrary";
 import { processText, convertLatexToReadable, type ExtractedData } from "@/utils/regexProcessor";
@@ -240,24 +238,6 @@ const Generator = () => {
                           setReportData(prev => ({
                             ...prev,
                             content: prev.content + ' ' + citation
-                          }));
-                        }}
-                      />
-                      <FigureManager
-                        reportId={currentReportId || undefined}
-                        onInsertReference={(ref) => {
-                          setReportData(prev => ({
-                            ...prev,
-                            content: prev.content + ' ' + ref
-                          }));
-                        }}
-                      />
-                      <TableEditor
-                        reportId={currentReportId || undefined}
-                        onInsertTable={(tableMarkdown) => {
-                          setReportData(prev => ({
-                            ...prev,
-                            content: prev.content + '\n\n' + tableMarkdown
                           }));
                         }}
                       />

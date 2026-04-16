@@ -1,5 +1,5 @@
 // Edge runtime: use built-in Deno.serve
-export {}
+export { }
 
 
 const corsHeaders = {
@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
       'academic-tone': 'Rewrite this content in a formal academic tone. Use third-person perspective, passive voice where appropriate, precise terminology, and scholarly language. Remove any casual expressions, contractions, or informal phrases. Add hedging language (e.g., "suggests", "indicates", "may") where claims are made. Ensure the writing style is suitable for an academic journal or thesis.',
       'add-examples': 'Enhance this content by adding concrete, real-world examples, case studies, and supporting data. For each main point, provide specific illustrations from industry, research, or practice. Include statistics, research findings, and practical applications where relevant. Make the content more tangible and evidence-based.',
       'simplify': 'Simplify this content to make it more accessible while retaining the key information. Break down complex concepts, use clearer language, add explanations for technical terms, and improve readability. Target a general academic audience rather than specialists.',
+      'grammar-check': 'Thoroughly check this content for grammatical errors, spelling mistakes, punctuation issues, and awkward phrasing. Correct all errors and improve the flow while STRICTLY preserving the original meaning, tone, and all markdown formatting. Do NOT add new information or expand topics; focus solely on linguistic correctness and readability.',
     };
 
     const systemPrompt = `You are an expert academic content editor with exceptional attention to detail and comprehensive writing skills. You specialize in transforming content for academic and professional contexts.`;
