@@ -161,7 +161,20 @@ export const PreviewPanel = ({
           originalText: cleanedContent,
           revisedText: improvedContent
         });
+      } else {
+        toast({
+          title: "Grammar check failed",
+          description: "Could not get grammar suggestions. Please try again.",
+          variant: "destructive",
+        });
       }
+    } catch (error) {
+      console.error('Grammar check error:', error);
+      toast({
+        title: "Grammar check failed",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
     } finally {
       setIsCheckingGrammar(false);
     }
